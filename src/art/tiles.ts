@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { makeCanvas, makeSprite, pixCircle } from './PixelArt';
+import { makeCanvas, makeSprite, pixCircle, pixRing } from './PixelArt';
 import { RNG } from '../utils/rng';
 import { T, TILE } from '../game/constants';
 
@@ -65,8 +65,18 @@ function buildTileset(scene: Phaser.Scene, key: string, p: TilePalette, seed: nu
       const ox = idx * TILE;
       fill(ox, p.floor[0]);
       if (p.style === 'grass') {
-        for (let n = 0; n < 22; n++) px(ox, rng.int(0, 15), rng.int(0, 15), rng.chance(0.5) ? p.floor[1] : p.floor[2]);
-        for (let n = 0; n < 3; n++) { const x = rng.int(1, 14), y = rng.int(2, 14); px(ox, x, y, p.floor[2]); px(ox, x, y - 1, p.floor[2]); }
+        // soft patches of lighter / darker grass instead of noisy speckles
+        for (let n = 0; n < 3; n++) {
+          c.fillStyle = rng.chance(0.5) ? p.floor[1] : p.floor[2];
+          const x = rng.int(0, 12), y = rng.int(0, 13), w = rng.int(3, 5);
+          c.fillRect(ox + x + 1, y, w - 2, 1); c.fillRect(ox + x, y + 1, w, 1); c.fillRect(ox + x + 1, y + 2, w - 2, 1);
+        }
+        for (let n = 0; n < 7; n++) px(ox, rng.int(0, 15), rng.int(0, 15), p.floor[rng.chance(0.5) ? 1 : 2]);
+        // little grass blades with a shadow
+        for (let n = 0; n < 4; n++) {
+          const x = rng.int(1, 13), y = rng.int(2, 14);
+          px(ox, x, y, '#62aa52'); px(ox, x, y - 1, '#62aa52'); px(ox, x + 1, y, p.floor[1]);
+        }
         if (deco) {
           for (let n = 0; n < 3; n++) {
             const x = rng.int(2, 13), y = rng.int(2, 13), col = p.deco[rng.int(0, 2)];
@@ -97,10 +107,21 @@ function buildTileset(scene: Phaser.Scene, key: string, p: TilePalette, seed: nu
         c.fillRect(ox, 0, 8, 8); c.fillRect(ox + 8, 8, 8, 8);
         c.fillStyle = p.floor[2]; c.fillRect(ox, 0, 16, 1); c.fillRect(ox, 0, 1, 16);
         if (deco) {
-          // glowing rune
-          c.fillStyle = p.deco[1];
-          c.fillRect(ox + 6, 4, 4, 1); c.fillRect(ox + 5, 5, 1, 6); c.fillRect(ox + 10, 5, 1, 6); c.fillRect(ox + 6, 11, 4, 1); c.fillRect(ox + 7, 7, 2, 2);
+          if (idx === 5) {
+            // a faint, rare rune
+            c.fillStyle = '#5a2a6a';
+            c.fillRect(ox + 6, 5, 4, 1); c.fillRect(ox + 5, 6, 1, 4); c.fillRect(ox + 10, 6, 1, 4); c.fillRect(ox + 6, 10, 4, 1);
+            c.fillStyle = '#8a4aa0'; c.fillRect(ox + 7, 7, 2, 2);
+          } else {
+            // cracked tile
+            c.fillStyle = '#1a0c18';
+            let x = rng.int(3, 12), y = rng.int(1, 4);
+            for (let n = 0; n < 9; n++) { c.fillRect(ox + x, y, 1, 1); x += rng.int(-1, 1); y += 1; if (n === 4) c.fillRect(ox + x + 1, y, 2, 1); }
+            c.fillStyle = p.floor[2]; c.fillRect(ox + rng.int(2, 12), rng.int(2, 12), 2, 1);
+          }
         }
+        // subtle bevel on every tile
+        c.fillStyle = '#00000033'; c.fillRect(ox + 15, 1, 1, 15); c.fillRect(ox + 1, 15, 15, 1);
       }
     };
     for (let i = 1; i <= 4; i++) floor(i, false);
@@ -126,9 +147,21 @@ function buildTileset(scene: Phaser.Scene, key: string, p: TilePalette, seed: nu
     {
       const ox = T.WALL * TILE;
       fill(ox, p.wallTop[0]);
-      for (let n = 0; n < 30; n++) px(ox, rng.int(0, 15), rng.int(0, 15), p.wallTop[rng.chance(0.6) ? 1 : 2]);
       if (p.style === 'grass') {
-        for (let n = 0; n < 6; n++) { const x = rng.int(1, 13), y = rng.int(1, 13); c.fillStyle = p.wallTop[2]; c.fillRect(ox + x, y, 2, 2); }
+        // dense hedge: leaf clumps with a lit top and a dark underside
+        for (let n = 0; n < 9; n++) {
+          const x = rng.int(0, 13), y = rng.int(0, 13);
+          c.fillStyle = p.wallTop[1]; c.fillRect(ox + x, y + 1, 4, 2);
+          c.fillStyle = p.wallTop[2]; c.fillRect(ox + x + 1, y, 2, 2);
+          c.fillStyle = '#5a8a4a'; c.fillRect(ox + x + 1, y, 1, 1);
+        }
+      } else {
+        // large stone slabs with seams and lit edges
+        c.fillStyle = p.wallTop[1];
+        c.fillRect(ox, 7, 16, 1); c.fillRect(ox + 7, 0, 1, 7); c.fillRect(ox + 3, 8, 1, 8); c.fillRect(ox + 12, 8, 1, 8);
+        c.fillStyle = p.wallTop[2];
+        c.fillRect(ox, 0, 7, 1); c.fillRect(ox + 8, 0, 8, 1); c.fillRect(ox, 8, 3, 1); c.fillRect(ox + 4, 8, 8, 1); c.fillRect(ox + 13, 8, 3, 1);
+        for (let n = 0; n < 10; n++) px(ox, rng.int(0, 15), rng.int(0, 15), p.wallTop[rng.chance(0.7) ? 1 : 2]);
       }
     }
     // wall face (bricks)
@@ -154,18 +187,54 @@ function buildTileset(scene: Phaser.Scene, key: string, p: TilePalette, seed: nu
     // block top + face
     {
       const ox = T.BLOCK * TILE;
-      fill(ox, p.block[0]);
-      c.fillStyle = p.block[2]; c.fillRect(ox + 1, 1, 14, 2); c.fillRect(ox + 1, 1, 2, 14);
-      c.fillStyle = p.block[1]; c.fillRect(ox, 15, 16, 1); c.fillRect(ox + 15, 0, 1, 16);
+      const fx = T.BLOCK_FACE * TILE;
       if (p.style === 'grass') {
-        // tree stump rings
-        c.fillStyle = p.block[1];
-        c.fillRect(ox + 5, 5, 6, 1); c.fillRect(ox + 5, 10, 6, 1); c.fillRect(ox + 5, 5, 1, 6); c.fillRect(ox + 10, 5, 1, 6);
+        // TOP: tree stump with growth rings on a moss base
+        fill(ox, '#2a4a28');
+        for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+          const d = Math.hypot(x - 7.5, y - 7.5);
+          if (d > 7.2) continue;
+          c.fillStyle = d > 6 ? '#4a2c14' : Math.floor(d) % 2 === 0 ? '#b07a44' : '#94643a';
+          c.fillRect(ox + x, y, 1, 1);
+        }
+        c.fillStyle = '#d09a5a'; c.fillRect(ox + 7, 7, 2, 2);
+        // FACE: bark with vertical grooves and moss at the base
+        fill(fx, '#5a3a20');
+        c.fillStyle = '#3e2614';
+        for (let x = 1; x < 16; x += 3) c.fillRect(fx + x, 0, 1, 16);
+        c.fillStyle = '#7a5230'; for (let x = 2; x < 16; x += 3) c.fillRect(fx + x, 0, 1, 12);
+        c.fillStyle = '#3c6a3a'; c.fillRect(fx, 13, 16, 3);
+        c.fillStyle = '#5a9a4a'; for (let x = 0; x < 16; x += 2) c.fillRect(fx + x, 12 + (x % 4 === 0 ? 0 : 1), 1, 1);
+      } else if (p.style === 'stone') {
+        // TOP: stone sarcophagus lid with an engraved cross
+        fill(ox, p.block[0]);
+        c.fillStyle = p.block[2]; c.fillRect(ox + 1, 1, 14, 1); c.fillRect(ox + 1, 1, 1, 14);
+        c.fillStyle = p.block[1]; c.fillRect(ox + 1, 14, 14, 1); c.fillRect(ox + 14, 1, 1, 14);
+        c.fillStyle = p.block[1]; c.fillRect(ox + 7, 3, 2, 10); c.fillRect(ox + 4, 6, 8, 2);
+        c.fillStyle = '#5a7a4a'; c.fillRect(ox + 2, 12, 3, 2); c.fillRect(ox + 12, 2, 2, 1);
+        // FACE: carved slab
+        fill(fx, p.block[1]);
+        c.fillStyle = p.block[0]; c.fillRect(fx + 2, 2, 12, 10);
+        c.fillStyle = p.block[2]; c.fillRect(fx + 2, 2, 12, 1);
+        c.fillStyle = '#2a2a36'; c.fillRect(fx + 5, 5, 6, 1); c.fillRect(fx + 5, 8, 6, 1);
+        c.fillStyle = '#00000066'; c.fillRect(fx, 13, 16, 3);
       } else {
-        c.fillStyle = p.block[1]; c.fillRect(ox + 4, 4, 8, 8);
-        c.fillStyle = p.block[0]; c.fillRect(ox + 5, 5, 6, 6);
+        // TOP: pillar capital with a gold ring
+        fill(ox, '#1c0c20');
+        for (let y = 0; y < 16; y++) for (let x = 0; x < 16; x++) {
+          const d = Math.hypot(x - 7.5, y - 7.5);
+          if (d > 7.4) continue;
+          c.fillStyle = d > 6.2 ? '#c0902a' : d > 5.2 ? '#f0c040' : d < 2 ? p.block[2] : p.block[0];
+          c.fillRect(ox + x, y, 1, 1);
+        }
+        // FACE: fluted column with a gold band
+        fill(fx, p.block[0]);
+        c.fillStyle = p.block[1]; for (let x = 1; x < 16; x += 4) c.fillRect(fx + x, 0, 1, 16);
+        c.fillStyle = p.block[2]; for (let x = 3; x < 16; x += 4) c.fillRect(fx + x, 0, 1, 16);
+        c.fillStyle = '#f0c040'; c.fillRect(fx, 1, 16, 2);
+        c.fillStyle = '#a07020'; c.fillRect(fx, 3, 16, 1);
+        c.fillStyle = '#00000066'; c.fillRect(fx, 13, 16, 3);
       }
-      bricks(T.BLOCK_FACE * TILE, [p.block[1], p.block[0], '#00000055', p.block[2]]);
     }
     // door (bars)
     {
@@ -178,7 +247,7 @@ function buildTileset(scene: Phaser.Scene, key: string, p: TilePalette, seed: nu
       for (let x = 1; x < 16; x += 4) c.fillRect(ox + x, 0, 1, 16);
     }
     // void
-    fill(0, '#0a0710');
+    // void stays transparent so the stage backdrop shows through
   });
 }
 
@@ -219,6 +288,68 @@ export function buildPropTextures(scene: Phaser.Scene) {
     '..kpPppppppp', '..kpppppppPp', '.kkkkkkkkkkk', 'kyyyyyyyyyyy', 'kgggggggggg.', 'kgkkkkkkkkkk', 'kgk........', 'kgk........', 'kkk........',
   ], { k: '#1a0a14', y: '#f0c040', r: '#e02040', p: '#6a1a4a', P: '#9a3a7a', g: '#3a1a30' }, { mirror: true });
 
+  // Demonic summoning sigil (drawn white, tinted red in game)
+  makeCanvas(scene, 'sigil', 64, 64, (c) => {
+    c.fillStyle = '#ffffff';
+    const line = (x0: number, y0: number, x1: number, y1: number) => {
+      const n = Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0));
+      for (let i = 0; i <= n; i++) c.fillRect(Math.round(x0 + ((x1 - x0) * i) / n), Math.round(y0 + ((y1 - y0) * i) / n), 1, 1);
+    };
+    pixRing(c, 32, 32, 30, 1, '#ffffff');
+    pixRing(c, 32, 32, 25, 1, '#ffffff');
+    pixRing(c, 32, 32, 8, 1, '#ffffff');
+    const pts = Array.from({ length: 5 }, (_, i) => {
+      const a = -Math.PI / 2 + (i * Math.PI * 2) / 5;
+      return [32 + Math.cos(a) * 25, 32 + Math.sin(a) * 25];
+    });
+    for (let i = 0; i < 5; i++) { const [a, b] = [pts[i], pts[(i + 2) % 5]]; line(a[0], a[1], b[0], b[1]); }
+    // runes between the two rings
+    for (let i = 0; i < 15; i++) {
+      const a = (i / 15) * Math.PI * 2;
+      const x = Math.round(32 + Math.cos(a) * 27.5), y = Math.round(32 + Math.sin(a) * 27.5);
+      const kind = i % 3;
+      if (kind === 0) { c.fillRect(x, y - 1, 1, 3); c.fillRect(x - 1, y - 1, 1, 1); }
+      else if (kind === 1) { c.fillRect(x - 1, y, 3, 1); c.fillRect(x, y + 1, 1, 1); }
+      else { c.fillRect(x - 1, y - 1, 1, 1); c.fillRect(x + 1, y + 1, 1, 1); c.fillRect(x, y, 1, 1); }
+    }
+  });
+  // Blood splats
+  for (let v = 0; v < 3; v++) {
+    makeCanvas(scene, `blood${v}`, 16, 12, (c) => {
+      const r = new RNG(500 + v * 31);
+      for (let i = 0; i < 7; i++) pixCircle(c, r.int(4, 11), r.int(3, 8), r.int(1, 3), i < 4 ? '#4a0810' : '#6a0c16');
+      for (let i = 0; i < 5; i++) { c.fillStyle = '#4a0810'; c.fillRect(r.int(0, 15), r.int(0, 11), 1, 1); }
+      c.fillStyle = '#8a1420'; c.fillRect(r.int(5, 9), r.int(4, 6), 2, 1);
+    });
+  }
+  // Hanging chain for walls
+  makeCanvas(scene, 'chain', 5, 20, (c) => {
+    for (let y = 0; y < 18; y += 4) {
+      c.fillStyle = '#5a5a68'; c.fillRect(1, y, 3, 3);
+      c.fillStyle = '#1a1a22'; c.fillRect(2, y + 1, 1, 1);
+      c.fillStyle = '#8a8a98'; c.fillRect(1, y, 1, 1);
+    }
+    c.fillStyle = '#5a5a68'; c.fillRect(0, 17, 5, 3); c.fillStyle = '#2a2a32'; c.fillRect(1, 18, 3, 1);
+  });
+  // Darkness mask: clear around the player, dark everywhere else
+  makeCanvas(scene, 'darkmask', 256, 256, (c) => {
+    const g = c.createRadialGradient(128, 128, 18, 128, 128, 112);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(0.45, 'rgba(0,0,0,0.35)');
+    g.addColorStop(1, 'rgba(0,0,0,1)');
+    c.fillStyle = g; c.fillRect(0, 0, 256, 256);
+  });
+
+  // Soft shadow cast by a wall onto the floor tile below it (adds depth)
+  makeCanvas(scene, 'wallshade', 16, 16, (c) => {
+    const rows = [0.5, 0.36, 0.25, 0.16, 0.09, 0.04];
+    rows.forEach((a, y) => { c.fillStyle = `rgba(6,2,10,${a})`; c.fillRect(0, y, 16, 1); });
+  });
+  // Shadow cast to the right of a wall/pillar
+  makeCanvas(scene, 'sideshade', 16, 16, (c) => {
+    [0.3, 0.18, 0.08].forEach((a, x) => { c.fillStyle = `rgba(6,2,10,${a})`; c.fillRect(x, 0, 1, 16); });
+  });
+
   // Light glow sprites used as fake lighting
   makeCanvas(scene, 'vignette', 320, 180, (c) => {
     const g = c.createRadialGradient(160, 90, 60, 160, 90, 200);
@@ -227,4 +358,67 @@ export function buildPropTextures(scene: Phaser.Scene) {
     c.fillStyle = g; c.fillRect(0, 0, 320, 180);
   });
   makeCanvas(scene, 'firefly', 3, 3, (c) => pixCircle(c, 1, 1, 1, '#ffffff'));
+}
+
+/** Tileable backdrops shown outside the playable map, one per stage (+ a lava glow layer). */
+export function buildVoidTextures(scene: Phaser.Scene) {
+  const N = 64;
+  // draw a shape at every wrap offset so the texture tiles seamlessly
+  const wrap = (fn: (ox: number, oy: number) => void) => { for (const ox of [-N, 0, N]) for (const oy of [-N, 0, N]) fn(ox, oy); };
+
+  // forest: dense dark canopy
+  makeCanvas(scene, 'abyss_0', N, N, (c) => {
+    const r = new RNG(71);
+    c.fillStyle = '#081208'; c.fillRect(0, 0, N, N);
+    const cols = ['#0e2212', '#132c17', '#183620', '#1e4226'];
+    for (let layer = 0; layer < 4; layer++) {
+      for (let i = 0; i < 14; i++) {
+        const x = r.int(0, N - 1), y = r.int(0, N - 1), rad = r.int(4, 8) - layer;
+        wrap((ox, oy) => pixCircle(c, x + ox, y + oy, rad, cols[layer]));
+        if (layer === 3) wrap((ox, oy) => { c.fillStyle = '#2a5432'; c.fillRect(x + ox - 1, y + oy - rad + 1, 2, 1); });
+      }
+    }
+  });
+
+  // cemetery: cold dark earth with tiny graves and crosses
+  makeCanvas(scene, 'abyss_1', N, N, (c) => {
+    const r = new RNG(72);
+    c.fillStyle = '#0a0a12'; c.fillRect(0, 0, N, N);
+    for (let i = 0; i < 90; i++) { c.fillStyle = r.chance(0.5) ? '#10101a' : '#151522'; c.fillRect(r.int(0, N - 1), r.int(0, N - 1), r.int(1, 3), 1); }
+    for (let i = 0; i < 5; i++) {
+      const x = r.int(2, N - 8), y = r.int(2, N - 10);
+      c.fillStyle = '#1c1c2a';
+      if (r.chance(0.5)) { c.fillRect(x + 2, y, 2, 8); c.fillRect(x, y + 2, 6, 2); }
+      else { c.fillRect(x + 1, y, 4, 1); c.fillRect(x, y + 1, 6, 7); }
+      c.fillStyle = '#0c0c14'; c.fillRect(x - 1, y + 8, 8, 1);
+    }
+  });
+
+  // castle: black rock split by glowing lava cracks
+  const cracks = new RNG(73);
+  const crackPaths: [number, number][][] = [];
+  for (let i = 0; i < 6; i++) {
+    let x = cracks.int(0, N - 1), y = cracks.int(0, N - 1);
+    const path: [number, number][] = [];
+    for (let s = 0; s < 26; s++) { path.push([x, y]); x += cracks.int(-1, 1); y += cracks.int(0, 1) || 1; if (cracks.chance(0.3)) x += cracks.chance(0.5) ? 1 : -1; }
+    crackPaths.push(path);
+  }
+  const drawCracks = (c: CanvasRenderingContext2D, outer: string, inner: string) => {
+    for (const path of crackPaths) for (const [x, y] of path) wrap((ox, oy) => {
+      c.fillStyle = outer; c.fillRect(((x + ox) % N + N) % N - 1 + (ox ? 0 : 0), ((y + oy) % N + N) % N, 3, 1);
+      c.fillStyle = inner; c.fillRect(((x + ox) % N + N) % N, ((y + oy) % N + N) % N, 1, 1);
+    });
+  };
+  makeCanvas(scene, 'abyss_2', N, N, (c) => {
+    const r = new RNG(74);
+    c.fillStyle = '#0c0508'; c.fillRect(0, 0, N, N);
+    for (let i = 0; i < 12; i++) { const x = r.int(0, N - 1), y = r.int(0, N - 1); wrap((ox, oy) => pixCircle(c, x + ox, y + oy, r.int(3, 6), '#160a0e')); }
+    drawCracks(c, '#4a0c08', '#a02010');
+  });
+  makeCanvas(scene, 'abyss_2_glow', N, N, (c) => drawCracks(c, '#ff3010', '#ffb040'));
+
+  // floating rock for the castle abyss
+  makeSprite(scene, 'floatrock', [
+    '..kkkkk...', '.kGGgggk..', 'kGggggggk.', 'kgggggdgkk', '.kgdgggdk.', '..kddddk..', '...kddk...', '....kk....',
+  ], { k: '#0a0406', G: '#5a3a44', g: '#3a222a', d: '#24141a' });
 }

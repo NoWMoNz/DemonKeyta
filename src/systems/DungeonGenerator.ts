@@ -118,7 +118,7 @@ function tryGenerate(stage: StageDef, rng: RNG): Dungeon | null {
         let t: number;
         if (ch === '#') t = T.BLOCK;
         else if (ch === 'c') t = x === 0 || template.rows[y][x - 1] !== 'c' || template.rows[y][x + 1] !== 'c' ? T.CARPET_EDGE : T.CARPET;
-        else t = rng.chance(0.12) ? T.FLOOR_DECO + rng.int(0, 2) : T.FLOOR + rng.int(0, 3);
+        else t = rng.chance(0.07) ? T.FLOOR_DECO + rng.int(0, 2) : T.FLOOR + rng.int(0, 3);
         tiles[y0 + y][x0 + x] = t;
       }
     }

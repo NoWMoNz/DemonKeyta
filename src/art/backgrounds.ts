@@ -51,6 +51,40 @@ export function buildBackgrounds(scene: Phaser.Scene) {
     c.fillRect(0, 140, 320, 40);
   });
 
+  // Drifting cloud for the menu parallax
+  makeCanvas(scene, 'cloud', 80, 24, (c) => {
+    const blobs = [[14, 15, 9], [28, 11, 11], [44, 9, 12], [60, 13, 10], [70, 16, 7], [36, 16, 9]];
+    c.fillStyle = '#2a1840';
+    for (const [x, y, r] of blobs) for (let yy = -r; yy <= r; yy++) for (let xx = -r; xx <= r; xx++) {
+      if (xx * xx + yy * yy <= r * r && y + yy < 24) c.fillRect(x + xx, y + yy, 1, 1);
+    }
+    c.fillStyle = '#4a3068';
+    for (const [x, y, r] of blobs) for (let xx = -r + 2; xx <= r - 2; xx++) {
+      const yy = -Math.round(Math.sqrt(Math.max(0, r * r - xx * xx)));
+      c.fillRect(x + xx, y + yy, 1, 2);
+    }
+  });
+
+  // Foreground: a cliff on the left for the hero, lower ground on the right
+  makeCanvas(scene, 'menu_ground', 320, 60, (c) => {
+    const top = (x: number) => {
+      if (x < 100) return 20 + Math.round(Math.sin(x / 9) * 1.5);
+      if (x < 130) return Math.round(20 + ((x - 100) / 30) * 22);
+      return 42 + Math.round(Math.sin(x / 13) * 2 + Math.sin(x / 5) * 0.8);
+    };
+    for (let x = 0; x < 320; x++) {
+      const t = top(x);
+      c.fillStyle = '#0c140e'; c.fillRect(x, t, 1, 60 - t);
+      c.fillStyle = '#16261a'; c.fillRect(x, t + 3, 1, 4);
+      c.fillStyle = '#3a6a34'; c.fillRect(x, t, 1, 2);
+      c.fillStyle = '#5a9a4a'; if (x % 3 === 0) c.fillRect(x, t - 1, 1, 1);
+      if (rng.chance(0.08)) { c.fillStyle = '#5a9a4a'; c.fillRect(x, t - 2, 1, 2); }
+    }
+    // rocks in the cliff face
+    c.fillStyle = '#1c2a20';
+    for (let i = 0; i < 18; i++) c.fillRect(rng.int(0, 120), rng.int(26, 56), rng.int(2, 5), 1);
+  });
+
   // Spotlight overlay (transparent center, dark edges)
   makeCanvas(scene, 'spotlight', 256, 256, (c) => {
     const g = c.createRadialGradient(128, 128, 22, 128, 128, 120);

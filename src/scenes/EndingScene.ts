@@ -176,12 +176,12 @@ export class EndingScene extends Phaser.Scene {
         this.cameras.main.shake(90, 0.006);
         const dust = this.add.particles(0, 0, 'smoke', { speed: { min: 8, max: 20 }, angle: { min: 180, max: 360 }, lifespan: 400, scale: { start: 0.5, end: 0 }, alpha: { start: 0.5, end: 0 }, tint: 0x806070, emitting: false });
         this.W.add(dust);
-        dust.explode(4, this.lover.x, this.lover.y + 13);
+        dust.explode(4, this.lover.x, this.lover.y + 16);
         this.time.delayedCall(500, () => dust.destroy());
       },
     });
     this.tweens.add({ targets: this.loverShadow, x: 214, y: 72, duration: 3200 });
-    await new Promise<void>((r) => this.tweens.add({ targets: this.lover, x: 214, y: 58, duration: 3200, onComplete: () => r() }));
+    await new Promise<void>((r) => this.tweens.add({ targets: this.lover, x: 214, y: 56, duration: 3200, onComplete: () => r() }));
     steps.remove();
     this.lover.play('lover_idle');
     this.tweens.addCounter({
@@ -194,7 +194,7 @@ export class EndingScene extends Phaser.Scene {
     // glasses glint
     this.lover.stop().setTexture('lover_glare');
     Audio.sfx('deflect');
-    const glint = this.add.image(this.lover.x + 5, this.lover.y - 3, 'spark').setBlendMode(Phaser.BlendModes.ADD).setScale(0);
+    const glint = this.add.image(this.lover.x + 3, this.lover.y - 6, 'spark').setBlendMode(Phaser.BlendModes.ADD).setScale(0);
     this.W.add(glint);
     this.tweens.add({ targets: glint, scale: 1.6, angle: 90, duration: 220, yoyo: true, onComplete: () => glint.destroy() });
     await this.wait(700);
@@ -245,14 +245,28 @@ export class EndingScene extends Phaser.Scene {
     // 5. The embrace
     Audio.sfx('heart');
     this.cameras.main.flash(400, 255, 200, 230);
-    this.lover.stop().setTexture('lover_happy');
+    this.lover.stop().setTexture('lover_idle0');
     this.tweens.add({ targets: [this.queen, this.lover], y: '-=4', duration: 140, yoyo: true, repeat: 1 });
+    // the moment he holds her, his red vampire eyes soften back to normal
+    this.time.delayedCall(700, () => {
+      for (const dx of [-2.5, 2.5]) {
+        const ex = this.lover.x + dx, ey = this.lover.y - 6;
+        const glow = this.add.image(ex, ey, 'glow').setTint(0xff3048).setBlendMode(Phaser.BlendModes.ADD).setScale(0.12).setAlpha(0.9);
+        const spark = this.add.image(ex, ey, 'spark').setBlendMode(Phaser.BlendModes.ADD).setScale(0);
+        this.W.add([glow, spark]);
+        this.tweens.add({ targets: glow, scale: 0.3, alpha: 0, duration: 700, onComplete: () => glow.destroy() });
+        this.tweens.add({ targets: spark, scale: 0.9, angle: 90, duration: 260, yoyo: true, delay: 250, onComplete: () => spark.destroy() });
+      }
+      Audio.sfx('heart');
+      this.time.delayedCall(250, () => this.lover.setTexture('lover_soft'));
+    });
     this.hearts.explode(30, 207, 52);
     this.time.addEvent({ delay: 450, loop: true, callback: () => this.hearts.explode(2, 207 + Phaser.Math.Between(-6, 6), 50) });
     this.tweens.add({ targets: this.overlay, fillAlpha: 0.1, duration: 1500 });
     Audio.playMusic('romance');
     this.hero.setAngle(0).setTexture('hero_sweat');
-    await this.wait(1200);
+    await this.wait(1600);
+    this.lover.setTexture('lover_happy');
     await this.say('lover', ENDING.loverHi, LOVER_NAME);
     await this.say('queen', ENDING.queenLove, undefined, 'queen_blush');
     Audio.sfx('heart');

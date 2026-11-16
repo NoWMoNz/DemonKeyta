@@ -34,6 +34,13 @@ export class Fx {
     this.smoke.explode(count, x, y);
   }
 
+  /** Small puff of dust at the feet (footsteps). */
+  dust(x: number, y: number) {
+    const d = this.scene.add.image(x + Phaser.Math.Between(-2, 2), y, 'smoke').setDepth(DEPTH.SHADOW + 0.5)
+      .setTint(0xd8d0c0).setAlpha(0.35).setScale(0.35);
+    this.scene.tweens.add({ targets: d, scale: 0.7, alpha: 0, y: y - 3, duration: 380, onComplete: () => d.destroy() });
+  }
+
   heartBurst(x: number, y: number, count = 12) {
     this.hearts.explode(count, x, y);
   }

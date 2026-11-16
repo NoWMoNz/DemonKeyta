@@ -31,7 +31,7 @@ export type SfxName =
   | 'magic' | 'dash' | 'hurt' | 'armorBreak' | 'pickup' | 'heal' | 'buff' | 'chest' | 'door' | 'doorOpen' | 'clear'
   | 'click' | 'hover' | 'explode' | 'telegraph' | 'spawn' | 'roar' | 'laser' | 'portal' | 'text' | 'textQueen'
   | 'textLover' | 'heart' | 'sob' | 'creak' | 'step' | 'sadTrombone' | 'drain' | 'gameover' | 'achievement'
-  | 'crickets' | 'whoosh' | 'gasp';
+  | 'crickets' | 'whoosh' | 'gasp' | 'thunder' | 'start';
 
 class Engine {
   ctx: AudioContext | null = null;
@@ -245,6 +245,12 @@ class Engine {
       case 'crickets': for (let i = 0; i < 6; i++) this.tone(4200, 4300, 0.04, 'sine', 0.03, i * 0.09 + (i > 2 ? 0.4 : 0)); break;
       case 'whoosh': this.noise(0.4, 300, 'bandpass', 0.3, 2000); break;
       case 'gasp': this.tone(600, 900, 0.12, 'triangle', 0.08); break;
+      case 'thunder':
+        this.noise(0.15, 4000, 'highpass', 0.25);
+        this.noise(1.6, 500, 'lowpass', 0.55, 50, 0.05);
+        this.tone(70, 30, 1.4, 'sine', 0.22, 0.05);
+        break;
+      case 'start': this.seq([392, 523, 659, 784, 1047], 0.07, 0.22, 'square', 0.06); this.noise(0.5, 2000, 'bandpass', 0.15, 6000); break;
     }
   }
 }

@@ -36,6 +36,8 @@ interface Pickup {
   sprite: Phaser.GameObjects.Image;
   kind: 'heart' | 'rage' | 'haste' | 'shield';
   t: number;
+  glow: Phaser.GameObjects.Image;
+  shadow: Phaser.GameObjects.Image;
 }
 
 export class GameScene extends Phaser.Scene {
@@ -67,6 +69,7 @@ export class GameScene extends Phaser.Scene {
   private ending = false;
   private toBoss = false;
   private cheatUntil = 0;
+  private voidLayers: { layer: Phaser.GameObjects.TileSprite; k: number; drift?: number }[] = [];
   private keys!: Record<string, Phaser.Input.Keyboard.Key>;
   private ambient: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
 
@@ -109,6 +112,19 @@ export class GameScene extends Phaser.Scene {
     this.layer = map.createLayer(0, ts, 0, 0)!;
     this.layer.setCollision(SOLID_TILES);
     this.layer.setDepth(DEPTH.FLOOR);
+    this.buildVoid();
+    // soft shadows cast by walls/obstacles onto the floor (light comes from the top-left)
+    const shades = this.add.blitter(0, 0, 'wallshade').setDepth(DEPTH.FLOOR + 0.5);
+    const sides = this.add.blitter(0, 0, 'sideshade').setDepth(DEPTH.FLOOR + 0.5);
+    const solid = (t: number | undefined) => t !== undefined && t !== T.VOID && (SOLID_TILES as number[]).includes(t);
+    for (let y = 1; y < d.h; y++) {
+      for (let x = 1; x < d.w; x++) {
+        const t = d.tiles[y][x];
+        if (t === T.VOID || solid(t)) continue;
+        if (solid(d.tiles[y - 1][x])) shades.create(x * TILE, y * TILE);
+        if (solid(d.tiles[y][x - 1])) sides.create(x * TILE, y * TILE);
+      }
+    }
     this.physics.world.setBounds(0, 0, d.w * TILE, d.h * TILE);
 
     // ---------------- groups ----------------
@@ -236,6 +252,8 @@ export class GameScene extends Phaser.Scene {
         this.add.image(x * TILE + 8, y * TILE + 8, this.rng.pick(props)).setDepth(DEPTH.DECOR);
       }
     }
+    this.demonicDecor();
+
     // story notes
     const notes = NOTES[this.stageIndex];
     const sr = d.start;
@@ -274,6 +292,119 @@ export class GameScene extends Phaser.Scene {
       }
       this.queen = new DemonQueen(this, b.cx * TILE + 8, (b.y0 + 3) * TILE + 8, b);
       this.addEnemy(this.queen);
+    }
+  }
+
+  /** Scenery outside the playable map: a parallax backdrop plus props scattered in the void. */
+  private buildVoid() {
+    const d = this.dungeon;
+    const st = this.stageIndex;
+    const W = d.w * TILE, H = d.h * TILE;
+    this.voidLayers = [];
+    const back = this.add.tileSprite(0, 0, W, H, `abyss_${st}`).setOrigin(0).setDepth(DEPTH.FLOOR - 3).setTint(0x9a9aa8);
+    this.voidLayers.push({ layer: back, k: 0.35 });
+    if (st === 2) {
+      const lava = this.add.tileSprite(0, 0, W, H, 'abyss_2_glow').setOrigin(0).setDepth(DEPTH.FLOOR - 2.9)
+        .setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.55);
+      this.voidLayers.push({ layer: lava, k: 0.35 });
+      this.tweens.add({ targets: lava, alpha: 0.2, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    }
+    // drifting mist over the void (a second, slower layer)
+    const mist = this.add.tileSprite(0, 0, W, H, 'abyss_1').setOrigin(0).setDepth(DEPTH.FLOOR - 2.5)
+      .setTint(st === 0 ? 0x30ff60 : st === 1 ? 0x8090c0 : 0xff3040).setAlpha(0.07).setBlendMode(Phaser.BlendModes.ADD).setTileScale(3);
+    this.voidLayers.push({ layer: mist, k: 0.15, drift: 6 });
+
+    // props in deep void (never next to walls)
+    const deepVoid = (x: number, y: number) => {
+      for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) if ((d.tiles[y + dy]?.[x + dx] ?? T.VOID) !== T.VOID) return false;
+      return true;
+    };
+    let placed = 0;
+    for (let i = 0; i < 900 && placed < Math.floor((d.w * d.h) / 140); i++) {
+      const tx = this.rng.int(0, d.w - 1), ty = this.rng.int(0, d.h - 1);
+      if (!deepVoid(tx, ty)) continue;
+      placed++;
+      const x = tx * TILE + this.rng.int(0, 15), y = ty * TILE + this.rng.int(0, 15);
+      const depth = DEPTH.FLOOR - 2;
+      if (st === 0) {
+        // dark trees and the odd glowing mushroom
+        if (this.rng.chance(0.75)) this.add.image(x, y, 'bush').setScale(this.rng.int(2, 3)).setTint(0x2a4a2c).setDepth(depth);
+        else {
+          this.add.image(x, y, 'mushrooms').setTint(0x60a0ff).setDepth(depth);
+          const g = this.add.image(x, y, 'glow').setTint(0x40a0ff).setBlendMode(Phaser.BlendModes.ADD).setScale(0.6).setAlpha(0.4).setDepth(depth);
+          this.tweens.add({ targets: g, alpha: 0.15, duration: 1400 + this.rng.int(0, 800), yoyo: true, repeat: -1 });
+        }
+      } else if (st === 1) {
+        // forgotten graves, dead trees and lonely candles
+        const roll = this.rng.next();
+        if (roll < 0.5) this.add.image(x, y, 'grave').setTint(0x50506a).setDepth(depth);
+        else if (roll < 0.8) this.add.image(x, y, 'deadtree').setScale(2).setTint(0x30304a).setDepth(depth);
+        else {
+          this.add.image(x, y, 'candle').setDepth(depth);
+          const g = this.add.image(x, y - 3, 'glow').setTint(0xffa040).setBlendMode(Phaser.BlendModes.ADD).setScale(0.5).setAlpha(0.4).setDepth(depth);
+          this.tweens.add({ targets: g, alpha: 0.2, duration: 200 + this.rng.int(0, 200), yoyo: true, repeat: -1 });
+        }
+      } else {
+        // rocks floating over the lava, some with skulls or chains
+        const rock = this.add.image(x, y, 'floatrock').setScale(this.rng.int(1, 2)).setDepth(depth);
+        const extras: Phaser.GameObjects.Image[] = [rock];
+        if (this.rng.chance(0.3)) extras.push(this.add.image(x, y - 6, 'skull').setDepth(depth).setTint(0xb0a090));
+        else if (this.rng.chance(0.3)) {
+          const s = this.add.image(x, y, 'sigil').setScale(0.35).setTint(0xff2040).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.5).setDepth(depth);
+          this.tweens.add({ targets: s, angle: 360, duration: 9000, repeat: -1 });
+          extras.push(s);
+        }
+        this.tweens.add({ targets: extras, y: '-=3', duration: 1600 + this.rng.int(0, 1200), yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: this.rng.int(0, 1000) });
+      }
+    }
+  }
+
+  /** Glowing demonic sigils, blood stains, chains and skulls (stronger in later stages). */
+  private demonicDecor() {
+    const d = this.dungeon;
+    const st = this.stageIndex;
+    const floorOk = (x: number, y: number) => {
+      const t = d.tiles[y]?.[x];
+      return t !== undefined && t >= T.FLOOR && t <= T.FLOOR_DECO + 2;
+    };
+    const sigil = (x: number, y: number, scale: number, alpha: number, color: number) => {
+      const s = this.add.image(x, y, 'sigil').setDepth(DEPTH.FLOOR + 0.6).setTint(color).setScale(scale)
+        .setAlpha(alpha).setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({ targets: s, angle: 360, duration: 40000 / scale, repeat: -1 });
+      this.tweens.add({ targets: s, alpha: alpha * 0.45, duration: 1600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      const glow = this.add.image(x, y, 'glow').setDepth(DEPTH.FLOOR + 0.55).setTint(color).setScale(scale * 1.6)
+        .setAlpha(alpha * 0.5).setBlendMode(Phaser.BlendModes.ADD);
+      this.tweens.add({ targets: glow, alpha: alpha * 0.2, duration: 1600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    };
+    for (const r of d.rooms) {
+      const cx = r.cx * TILE + 8, cy = r.cy * TILE + 8;
+      // sigils: every combat/boss room from stage 2, some rooms in the forest
+      if (r.type === 'boss' && this.stage.boss === 'queen') sigil(cx, cy + 16, 2.6, 0.28, 0xff1840);
+      else if (r.type === 'boss') sigil(cx, cy, 1.8, 0.4, st === 0 ? 0x60ff60 : 0x40ffd0);
+      else if (r.type === 'combat' && (st > 0 || this.rng.chance(0.4))) sigil(cx, cy, st === 2 ? 1.3 : 1.1, st === 0 ? 0.22 : 0.32, st === 0 ? 0xa040ff : 0xff2040);
+      // blood stains on the floor
+      const stains = st === 0 ? 0 : st === 1 ? 3 : 5;
+      for (let i = 0; i < stains; i++) {
+        const x = this.rng.int(r.x0, r.x1), y = this.rng.int(r.y0, r.y1);
+        if (!floorOk(x, y)) continue;
+        this.add.image(x * TILE + 8, y * TILE + 8, `blood${this.rng.int(0, 2)}`).setDepth(DEPTH.FLOOR + 0.7)
+          .setAlpha(0.7).setFlipX(this.rng.chance(0.5)).setAngle(this.rng.int(0, 3) * 90);
+      }
+      // chains and skulls on the top wall
+      if (st > 0) {
+        for (let x = r.x0 + 3; x <= r.x1 - 1; x += 4) {
+          if (d.tiles[r.y0 - 1]?.[x] !== T.WALL_FACE) continue;
+          const wx = x * TILE + 8, wy = (r.y0 - 1) * TILE + 2;
+          if (this.rng.chance(0.5)) {
+            const ch = this.add.image(wx, wy, 'chain').setOrigin(0.5, 0).setDepth(DEPTH.DECOR);
+            this.tweens.add({ targets: ch, angle: { from: -4, to: 4 }, duration: 1800 + this.rng.int(0, 800), yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+          } else {
+            this.add.image(wx, wy + 8, 'skull').setDepth(DEPTH.DECOR).setTint(0xd8d0c0);
+            const eyes = this.add.image(wx, wy + 8, 'glow').setDepth(DEPTH.DECOR).setTint(0xff2040).setScale(0.14).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.5);
+            this.tweens.add({ targets: eyes, alpha: 0.15, duration: 900 + this.rng.int(0, 600), yoyo: true, repeat: -1 });
+          }
+        }
+      }
     }
   }
 
@@ -376,17 +507,24 @@ export class GameScene extends Phaser.Scene {
   spawnPickup(x: number, y: number, kind: Pickup['kind']) {
     const tex = kind === 'heart' ? 'heart' : `buff_${kind}`;
     const s = this.add.image(x, y, tex).setDepth(DEPTH.PICKUP);
+    const glowTint = kind === 'heart' ? 0xff4060 : kind === 'rage' ? 0xff4040 : kind === 'haste' ? 0x40c0ff : 0xf0c040;
+    const glow = this.add.image(x, y, 'glow').setDepth(DEPTH.PICKUP - 0.5).setBlendMode(Phaser.BlendModes.ADD).setTint(glowTint).setScale(0.45).setAlpha(0.5);
+    const shadow = this.add.image(x, y + 6, 'shadow').setDepth(DEPTH.SHADOW).setScale(0.7);
     // little pop out
     const a = Math.random() * Math.PI * 2;
     this.tweens.add({ targets: s, x: x + Math.cos(a) * 10, y: y + Math.sin(a) * 10, duration: 250, ease: 'Quad.easeOut' });
-    this.pickups.push({ sprite: s, kind, t: 0 });
+    this.pickups.push({ sprite: s, kind, t: 0, glow, shadow });
   }
 
   private updatePickups(dt: number) {
     const p = this.player;
     for (const pk of [...this.pickups]) {
       pk.t += dt;
+      const bob = Math.sin(pk.t / 220) * 1.5;
       pk.sprite.setScale(1 + Math.sin(pk.t / 200) * 0.08);
+      pk.sprite.setDisplayOrigin(pk.sprite.width / 2, pk.sprite.height / 2 - bob);
+      pk.glow.setPosition(pk.sprite.x, pk.sprite.y - bob).setAlpha(0.4 + Math.sin(pk.t / 180) * 0.15);
+      pk.shadow.setPosition(pk.sprite.x, pk.sprite.y + 6).setScale(0.7 - bob * 0.04, 0.7);
       if (pk.t < 400) continue;
       const d = dist(p.x, p.y, pk.sprite.x, pk.sprite.y);
       const wantsHeart = pk.kind !== 'heart' || p.run.hp < p.run.maxHp;
@@ -406,7 +544,7 @@ export class GameScene extends Phaser.Scene {
           this.hud.toast(names[pk.kind][0], pk.kind === 'rage' ? TEXT_COLORS.red : pk.kind === 'haste' ? TEXT_COLORS.blue : TEXT_COLORS.gold, names[pk.kind][1]);
           this.fx.ringPulse(p.x, p.y, 0xffffff, 0.8);
         }
-        pk.sprite.destroy();
+        pk.sprite.destroy(); pk.glow.destroy(); pk.shadow.destroy();
         this.pickups = this.pickups.filter((x) => x !== pk);
       }
     }
@@ -866,6 +1004,12 @@ export class GameScene extends Phaser.Scene {
       this.updateInteract();
     }
     this.drawHpBars();
+    // parallax: the void scrolls slower than the floor so it feels far below
+    const cam = this.cameras.main;
+    for (const v of this.voidLayers) {
+      v.layer.tilePositionX = cam.scrollX * v.k + (v.drift ? (time / 1000) * v.drift : 0);
+      v.layer.tilePositionY = cam.scrollY * v.k;
+    }
     if (this.ambient) {
       const c = this.cameras.main;
       this.ambient.setPosition(c.midPoint.x, c.midPoint.y);

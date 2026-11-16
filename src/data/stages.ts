@@ -40,6 +40,6 @@ export const STAGES: StageDef[] = [
     combatRooms: 5, waves: [2, 3], budget: 6.5, budgetGrowth: 1,
     pool: { knight: 2, imp: 4, mage: 3, archer: 2, skeleton: 2 },
     eliteChance: 0.16, boss: 'queen', ambient: 'embers',
-    props: ['candelabra', 'bones', 'skull', 'candle'], tint: 0x300818, tintAlpha: 0.14,
+    props: ['candelabra', 'bones', 'skull', 'candle'], tint: 0x400818, tintAlpha: 0.22,
   },
 ];

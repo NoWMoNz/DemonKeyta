@@ -22,7 +22,7 @@ const PHOTO_FOR: Record<string, string> = {
   queen_shock: 'photo_queen',
   queen_cry: 'photo_queen_cry',
   queen_blush: 'photo_queen_love',
-  lover_idle0: 'photo_lover',
+  lover_idle0: 'photo_lover_alt',
   lover_happy: 'photo_lover_happy',
 };
 

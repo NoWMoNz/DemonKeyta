@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { buildCharacterTextures, buildItemTextures, buildEffectTextures } from '../art/sprites';
-import { buildTilesets, buildPropTextures } from '../art/tiles';
+import { buildTilesets, buildPropTextures, buildVoidTextures } from '../art/tiles';
 import { buildBackgrounds, registerTileFrames } from '../art/backgrounds';
 
 /** Generates every texture/animation procedurally, then shows the menu. */
@@ -31,6 +31,7 @@ export class BootScene extends Phaser.Scene {
     buildEffectTextures(this);
     buildTilesets(this);
     buildPropTextures(this);
+    buildVoidTextures(this);
     buildBackgrounds(this);
     registerTileFrames(this);
     this.createAnims();

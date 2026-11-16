@@ -34,52 +34,52 @@ const LEGS = {
 };
 
 /*
- * กาโตะ (the lover): based on the photos. Big curly black hair, tortoise-shell glasses,
- * tan skin, black tee with a silver chain. Made imposing: much taller than the hero,
- * long black coat with red lining, stern brows and a firm mouth.
- * 24 x 28 px, mirrored top half + hand-built legs.
+ * กาโตะ (the lover): a handsome vampire based on the photos. Short ear-length curly black hair,
+ * thin gold fashion glasses, sharp brows and glowing red eyes, a tall slim build, a high-collared cape with red lining,
+ * a white cravat with a ruby brooch and a long coat. 24 x 32 px, mirrored + hand-built legs.
  */
 const LOVER_PAL: Palette = {
-  k: '#0c0810', h: '#16121a', H: '#3c3444', s: '#c8946a', S: '#a0704c', f: '#3a2414', L: '#5a6488',
-  W: '#ffffff', e: '#120c0c', c: '#1c1824', C: '#3e3850', r: '#a01828', t: '#2c2c34', n: '#d8dae6',
-  p: '#16121c', b: '#08060a',
+  k: '#0a0610', h: '#121018', H: '#34303e', s: '#e8c2a6', S: '#c69c82', f: '#2a1a14', L: '#4a3a5a',
+  e: '#ff3048', W: '#ffffff', c: '#16121e', C: '#3a3450', r: '#7a0e1c', R: '#c02030', w: '#ece8f0',
+  g: '#ff2040', y: '#f0c040', p: '#120e18', b: '#060408', E: '#3a2216', l: '#d8c8d8', B: '#f0a0a0', G: '#1e1418',
 };
 const LOVER_HALF = [
-  '....kk.kkk.k',
-  '...khHkhHhkh',
-  '..khhHhhhHhh',
-  '.khHhhhhhhhh',
-  '.khhhhHhhhhh',
-  'khhhhhhhhhhh',
-  'khhhkhhhhhhh',
-  'khhkhsshhsss',
-  'khhksskkksss',
-  'khhksfffffff',
-  'khhksfWLeLfs',
-  'khhksfLLLLfs',
-  'khhksffffffs',
-  '.khksssssssS',
-  '..kkSsssssss',
-  '...kSsssskkk',
-  '...kkSssssss',
-  '....kkSSSSSS',
-  '..kCcckSsssss',
-  '.kCcccrktntt',
-  'kCCcccrkttnt',
-  'kCcccccrkttn',
-  'kCccckcrkttt',
-  'kscccccrkttt',
-  '.kcccccrkppp',
-  '.kcccccrkppp',
+  '............',
+  '............',
+  '............',
+  '.......kkkkk',
+  '.....kkhHhhh',
+  '....khHhhHhh',
+  '....khhHhhHh',
+  '...khhHhhhHs',
+  '...khHhhkkss',
+  '.k..khhsGGGs',
+  'rk.khhkGsesG',
+  'rrk.kSksGGGs',
+  'rRk...kssssS',
+  'rRk...ksssss',
+  'rRrk..kSsssk',
+  'rRrk...kSsss',
+  '.rRrk...kSss',
+  '.rRrk...kSSS',
+  '..rRrrkkwwww',
+  '..krRrkcwwwg',
+  '..kcrRkcCwww',
+  '..kcrRkcCcww',
+  '.kccrRkcCcck',
+  '.kccrRkcCccy',
+  '.kccrRkcCcck',
+  'kcccrRkcCccy',
+  'kcccrRkcCcck',
+  'kccrRRkcCcck',
+  'kcrRRRkcCcck',
+  'krRRRk.kccpp',
+  'kkkkk..kcppk',
 ];
 const mirrorRows = (rows: string[]) => rows.map((r) => { const h = r.padEnd(12, '.').slice(0, 12); return h + h.split('').reverse().join(''); });
-/** Coat hem + legs (left leg at L, right leg at R). */
+/** Legs below the cape (left leg at L, right leg at R). */
 function loverLegs(L: number, R: number): string[] {
   const a = Array(24).fill('.'), b = Array(24).fill('.');
-  'kCcccrk'.split('').forEach((ch, i) => { a[1 + i] = ch; });
-  'krccccCk'.split('').forEach((ch, i) => { a[16 + i] = ch; });
-  for (let x = 2; x <= 6; x++) b[x] = 'k';
-  for (let x = 17; x <= 21; x++) b[x] = 'k';
   for (const x of [L, R]) {
     a[x] = 'k'; a[x + 1] = 'p'; a[x + 2] = 'k';
     b[x] = 'k'; b[x + 1] = 'b'; b[x + 2] = 'k';
@@ -213,23 +213,31 @@ export function buildCharacterTextures(scene: Phaser.Scene) {
   // 't' = sweat drop
   HERO_PAL.t = '#8ad8ff';
   hero('hero_sweat', LEGS.stand, 0, (r) => { r[5] = '...kMmmmmmmmk.t.'; r[6] = '...kmmmkssssktt.'; return r; });
+  // face crop for the HUD portrait
+  const heroSrc = scene.textures.get('hero_idle0').getSourceImage() as HTMLCanvasElement;
+  makeCanvas(scene, 'hero_face', 12, 11, (c) => c.drawImage(heroSrc, 2, 1, 12, 11, 0, 0, 12, 11));
   hero('hero_sad', LEGS.stand, 1, (r) => { r[7] = '...kmmksssksk...'; r[8] = '...kdmkssSSsk...'; return r; });
 
-  // Lover frames (24x28): mirrored top + legs
+  // Lover frames (24x32): mirrored top + legs
   const lover = (key: string, legs: string[], mod?: (rows: string[]) => string[], bob = false) => {
     let top = [...LOVER_HALF];
     if (mod) top = mod(top);
     let rows = mirrorRows(top);
-    if (bob) rows = ['.'.repeat(24), ...rows.slice(0, 25)];
+    if (bob) rows = ['.'.repeat(24), ...rows.slice(0, rows.length - 1)];
     makeSprite(scene, key, [...rows, ...legs], LOVER_PAL, { width: 24 });
   };
-  lover('lover_idle0', loverLegs(8, 13));
-  lover('lover_idle1', loverLegs(8, 13), undefined, true);
-  lover('lover_walk0', loverLegs(7, 13));
-  lover('lover_walk1', loverLegs(8, 13), undefined, true);
-  lover('lover_walk2', loverLegs(8, 14));
-  lover('lover_happy', loverLegs(8, 13), (r) => { r[15] = '...kSssssk ss'.replace(' ', ''); r[16] = '...kkSsssskk'; return r; });
-  lover('lover_glare', loverLegs(8, 13), (r) => { r[10] = 'khhksfWWWWfs'; r[11] = 'khhksfWWWWfs'; return r; });
+  lover('lover_idle0', loverLegs(9, 12));
+  lover('lover_idle1', loverLegs(9, 12), undefined, true);
+  lover('lover_walk0', loverLegs(8, 13));
+  lover('lover_walk1', loverLegs(9, 12), undefined, true);
+  lover('lover_walk2', loverLegs(10, 12));
+  // a warm smile that shows his fangs
+  // eyes turn back to normal (warm brown, clear lenses) and he blushes a little
+  const soft = (r: string[]) => { r[10] = 'rk.khhkGsEsG'; r[12] = 'rRk...ksBssS'; return r; };
+  lover('lover_soft', loverLegs(9, 12), soft);
+  lover('lover_happy', loverLegs(9, 12), (r) => { soft(r); r[14] = 'rRrk..kSssks'; r[15] = 'rRrk...kSssw'; return r; });
+  // glasses catching the light
+  lover('lover_glare', loverLegs(9, 12), (r) => { r[10] = 'rk.khhkGWWWG'; return r; });
 
   // Queen frames (24x24 mirrored)
   const queen = (key: string, mod?: (rows: string[]) => string[]) => {

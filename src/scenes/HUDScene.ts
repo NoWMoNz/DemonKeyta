@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GAME_W, GAME_H, TEXT_COLORS, COLORS } from '../game/constants';
+import { GAME_W, GAME_H, TEXT_COLORS, COLORS, T } from '../game/constants';
 import { drawPanel, text } from '../ui/widgets';
 import { DialogueBox } from '../ui/DialogueBox';
 import { VirtualJoystick } from '../ui/VirtualJoystick';
@@ -17,6 +17,16 @@ export class HUDScene extends Phaser.Scene {
   dialogue!: DialogueBox;
   pointerOverUI = false;
   private g!: Phaser.GameObjects.Graphics;
+  private darkness!: Phaser.GameObjects.Image;
+  private darkAlpha = 0.5;
+  private eyes: {
+    wx: number; wy: number; parts: Phaser.GameObjects.GameObject[]; root: Phaser.GameObjects.Container;
+    pupils: Phaser.GameObjects.Rectangle[]; size: number; fleeing: boolean;
+  }[] = [];
+  private eyeTimer = 0;
+  private portrait!: Phaser.GameObjects.Image;
+  private heartIcon!: Phaser.GameObjects.Image;
+  private weaponGlow!: Phaser.GameObjects.Image;
   private hpText!: Phaser.GameObjects.Text;
   private armorText!: Phaser.GameObjects.Text;
   private weaponName!: Phaser.GameObjects.Text;
@@ -57,29 +67,38 @@ export class HUDScene extends Phaser.Scene {
     const gs = this.game_;
     if (gs.stage.tintAlpha > 0) this.add.rectangle(0, 0, GAME_W, GAME_H, gs.stage.tint, gs.stage.tintAlpha).setOrigin(0).setBlendMode(Phaser.BlendModes.MULTIPLY);
     void vign;
+    // darkness: only the area around the hero is fully lit (darker in later stages)
+    this.darkness = this.add.image(GAME_W / 2, GAME_H / 2, 'darkmask').setScale(4).setAlpha(0);
+    this.darkAlpha = [0.42, 0.7, 0.62][gs.stageIndex] ?? 0.5;
+    this.eyes = [];
+    this.eyeTimer = 1500;
     this.damageFlash = this.add.rectangle(0, 0, GAME_W, GAME_H, 0xff0000, 0).setOrigin(0);
 
-    this.g = this.add.graphics();
-    this.hpText = text(this, 112, 13, '', 8).setOrigin(0.5, 0);
-    this.armorText = text(this, 112, 29, '', 8).setOrigin(0.5, 0);
-    this.add.image(18, 17, 'heart').setScale(1.2);
-    this.add.image(18, 33, 'buff_shield').setScale(0.85);
+    this.g = this.add.graphics().setDepth(1);
+    // portrait + bars (drawn in update); icons and numbers sit on top
+    this.portrait = this.add.image(29, 29, 'hero_face').setScale(3).setDepth(1);
+    this.heartIcon = this.add.image(58, 18, 'heart').setScale(1.1).setDepth(1);
+    this.add.image(58, 36, 'buff_shield').setScale(0.75).setDepth(1);
+    const num = { stroke: '#07050c', strokeThickness: 3 };
+    this.hpText = text(this, 124, 13, '', 8, '#ffffff', num).setOrigin(0.5, 0).setDepth(2);
+    this.armorText = text(this, 124, 32, '', 8, '#ffffff', num).setOrigin(0.5, 0).setDepth(2);
 
-    this.stageText = text(this, GAME_W / 2, 10, `${gs.stage.subtitle} - ${gs.stage.name}`, 8, TEXT_COLORS.gray).setOrigin(0.5, 0);
+    this.stageText = text(this, GAME_W / 2, 10, `${gs.stage.subtitle} - ${gs.stage.name}`, 8, '#e8e0f0', { stroke: '#07050c', strokeThickness: 3 }).setOrigin(0.5, 0);
 
     // weapon panel
     const wy = GAME_H - 34;
-    this.weaponIcon = this.add.image(GAME_W - 46, wy, 'w_sword').setScale(2);
-    this.weapon2Icon = this.add.image(GAME_W - 104, wy + 4, 'w_staff').setScale(1).setAlpha(0.6);
-    this.weaponName = text(this, GAME_W - 8, wy - 24, '', 8).setOrigin(1, 1);
+    this.weaponGlow = this.add.image(GAME_W - 46, wy, 'glow').setBlendMode(Phaser.BlendModes.ADD).setScale(1.1, 0.6).setAlpha(0.35).setDepth(1);
+    this.weaponIcon = this.add.image(GAME_W - 46, wy, 'w_sword').setScale(2).setDepth(2);
+    this.weapon2Icon = this.add.image(GAME_W - 104, wy + 4, 'w_staff').setScale(1).setAlpha(0.6).setDepth(2);
+    this.weaponName = text(this, GAME_W - 8, wy - 24, '', 8, '#ffffff', { stroke: '#07050c', strokeThickness: 3 }).setOrigin(1, 1);
 
     // boss bar
-    this.bossName = text(this, GAME_W / 2, 26, '', 8, TEXT_COLORS.pink).setOrigin(0.5, 0).setVisible(false);
+    this.bossName = text(this, GAME_W / 2, 24, '', 8, TEXT_COLORS.pink, { stroke: '#07050c', strokeThickness: 4 }).setOrigin(0.5, 0).setVisible(false).setDepth(2);
 
     // buffs
     for (let i = 0; i < 3; i++) {
-      this.buffIcons.push(this.add.image(18 + i * 30, 56, 'buff_rage').setVisible(false));
-      this.buffTexts.push(text(this, 28 + i * 30, 52, '', 8).setVisible(false));
+      this.buffIcons.push(this.add.image(18 + i * 30, 62, 'buff_rage').setVisible(false).setDepth(1));
+      this.buffTexts.push(text(this, 28 + i * 30, 58, '', 8, '#ffffff', { stroke: '#07050c', strokeThickness: 3 }).setVisible(false).setDepth(1));
     }
 
     // pause button
@@ -219,6 +238,114 @@ export class HUDScene extends Phaser.Scene {
     this.stageText.setVisible(true);
   }
 
+  /**
+   * A bevelled bar: dark frame, white "recent damage" trail, coloured fill with a lit top
+   * and shaded bottom, and optional segment ticks (one per HP point).
+   * colors = [base, light, dark, background]
+   */
+  private drawBar(g: Phaser.GameObjects.Graphics, x: number, y: number, w: number, h: number, ratio: number, trail: number, colors: number[], segments: number) {
+    const [base, light, dark, back] = colors;
+    const r = Phaser.Math.Clamp(ratio, 0, 1), tr = Phaser.Math.Clamp(trail, 0, 1);
+    g.fillStyle(0x07050c, 1).fillRect(x - 1, y - 1, w + 2, h + 2);
+    g.fillStyle(back, 1).fillRect(x, y, w, h);
+    g.fillStyle(0x000000, 0.35).fillRect(x, y, w, 2);
+    if (tr > r) g.fillStyle(0xffffff, 0.55).fillRect(x + w * r, y, w * (tr - r), h);
+    const fw = Math.round(w * r);
+    if (fw > 0) {
+      g.fillStyle(base, 1).fillRect(x, y, fw, h);
+      g.fillStyle(light, 1).fillRect(x, y, fw, Math.max(1, Math.floor(h * 0.25)));
+      g.fillStyle(0xffffff, 0.35).fillRect(x + 1, y + 1, Math.max(0, fw - 2), 1);
+      g.fillStyle(dark, 1).fillRect(x, y + h - Math.max(1, Math.floor(h * 0.25)), fw, Math.max(1, Math.floor(h * 0.25)));
+    }
+    if (segments > 1 && segments <= 30) {
+      g.fillStyle(0x07050c, 0.55);
+      for (let i = 1; i < segments; i++) g.fillRect(Math.round(x + (w * i) / segments), y, 1, h);
+    }
+  }
+
+  /** Darkness that follows the hero, and red eyes that watch from the dark outside the rooms. */
+  private updateDarkness(gs: GameScene, dt: number) {
+    const cam = gs.cameras.main;
+    const p = gs.player;
+    const toScreen = (wx: number, wy: number) => ({ x: (wx - cam.worldView.x) * cam.zoom, y: (wy - cam.worldView.y) * cam.zoom });
+    const ps = toScreen(p.x, p.y);
+    // lighter during boss fights so attacks stay readable
+    const target = this.darkAlpha * (gs.bossTarget ? 0.55 : 1);
+    this.darkness.setPosition(ps.x, ps.y).setAlpha(this.darkness.alpha + (target - this.darkness.alpha) * Math.min(1, dt / 400));
+
+    // watching eyes: many pairs, always somewhere in the dark, following the hero
+    const maxEyes = gs.bossTarget ? 5 : [7, 10, 10][gs.stageIndex] ?? 8;
+    this.eyeTimer -= dt;
+    if (this.eyeTimer <= 0 && this.eyes.length < maxEyes && !gs.cutscene) {
+      this.eyeTimer = Phaser.Math.Between(250, 800);
+      const view = cam.worldView;
+      for (let i = 0; i < 20; i++) {
+        const wx = Phaser.Math.Between(view.x + 8, view.right - 8), wy = Phaser.Math.Between(view.y + 8, view.bottom - 8);
+        const t = gs.dungeon.tiles[Math.floor(wy / 16)]?.[Math.floor(wx / 16)];
+        const dist = Phaser.Math.Distance.Between(wx, wy, p.x, p.y);
+        // in the void, or on a floor far enough to be swallowed by the darkness
+        const dark = t === T.VOID ? dist > 70 : dist > 130 && t !== undefined && t !== T.WALL && t !== T.WALL_FACE;
+        if (!dark || this.eyes.some((e) => Phaser.Math.Distance.Between(e.wx, e.wy, wx, wy) < 24)) continue;
+        this.spawnEyes(wx, wy);
+        break;
+      }
+    }
+    for (const e of [...this.eyes]) {
+      const s = toScreen(e.wx, e.wy);
+      e.root.setPosition(s.x, s.y);
+      // pupils track the hero
+      const a = Math.atan2(p.y - e.wy, p.x - e.wx);
+      for (const pu of e.pupils) pu.setPosition(pu.getData('bx') + Math.cos(a) * 0.8 * e.size, Math.sin(a) * 0.5 * e.size);
+      // too close: they snap shut and vanish
+      if (!e.fleeing && Phaser.Math.Distance.Between(e.wx, e.wy, p.x, p.y) < 50) {
+        e.fleeing = true;
+        this.tweens.killTweensOf(e.root);
+        this.tweens.add({ targets: e.root, scaleY: 0.05, alpha: 0, duration: 140, onComplete: () => this.removeEyes(e) });
+      }
+    }
+  }
+
+  private spawnEyes(wx: number, wy: number) {
+    const roll = Math.random();
+    const size = roll < 0.15 ? 2.2 : roll < 0.55 ? 1.4 : 1;
+    const three = Math.random() < 0.12;
+    const offsets = three ? [-6, 0, 6] : [-4, 4];
+    const color = Math.random() < 0.15 ? 0xffb020 : 0xff3048;
+    const parts: Phaser.GameObjects.GameObject[] = [];
+    const glow = this.add.image(0, 0, 'glow').setTint(color === 0xff3048 ? 0xff1030 : 0xff8010).setBlendMode(Phaser.BlendModes.ADD)
+      .setScale(0.3 * size + (three ? 0.1 : 0), 0.15 * size).setAlpha(0.45);
+    parts.push(glow);
+    const lids: Phaser.GameObjects.Rectangle[] = [];
+    const pupils: Phaser.GameObjects.Rectangle[] = [];
+    offsets.forEach((ox, i) => {
+      const y = three && i === 1 ? -3 * size : 0;
+      const eyeR = this.add.rectangle(ox * size, y, 3 * size, 2 * size, color);
+      const pupil = this.add.rectangle(ox * size, y, Math.max(1, size), Math.max(1, size * 1.4), 0x1a0006).setData('bx', ox * size);
+      lids.push(eyeR); pupils.push(pupil);
+      parts.push(eyeR, pupil);
+    });
+    const root = this.add.container(0, 0, parts).setAlpha(0).setDepth(0.5);
+    const eye = { wx, wy, parts, root, pupils, size, fleeing: false };
+    this.eyes.push(eye);
+    const life = Phaser.Math.Between(3500, 9000);
+    this.tweens.add({ targets: root, alpha: Phaser.Math.FloatBetween(0.6, 1), duration: Phaser.Math.Between(400, 1200) });
+    // blink a few times while watching
+    const blinks = Math.floor(life / 1800);
+    for (let i = 0; i < blinks; i++) {
+      this.tweens.add({ targets: [...lids, ...pupils], scaleY: 0.1, duration: 80, yoyo: true, delay: 900 + i * Phaser.Math.Between(1300, 2100) });
+    }
+    this.tweens.add({
+      targets: root, alpha: 0, duration: 700, delay: life,
+      onComplete: () => this.removeEyes(eye),
+    });
+  }
+
+  private removeEyes(e: { root: Phaser.GameObjects.Container }) {
+    if (!this.eyes.includes(e as never)) return;
+    this.eyes = this.eyes.filter((x) => x !== e);
+    e.root.destroy();
+  }
+
   // ------------------------------------------------------------- update
   update(_t: number, dt: number) {
     const gs = this.game_;
@@ -227,24 +354,29 @@ export class HUDScene extends Phaser.Scene {
     const p = gs.player;
     const g = this.g;
     g.clear();
+    this.updateDarkness(gs, dt);
 
-    // HP / armor panel
-    drawPanel(g, 6, 6, 152, 38, 0x150f24, 0x4a3a7a, 0.85);
+    // HP / armor panel with the hero's portrait
+    drawPanel(g, 6, 6, 186, 46, 0x150f24, 0x5a4a8a, 0.88);
+    drawPanel(g, 10, 10, 38, 38, 0x2a2048, p.invuln > 0 && p.sinceHit < 400 ? 0xff5050 : 0x8a7ac0, 1);
     this.hpShown += (r.hp - this.hpShown) * Math.min(1, dt / 120);
-    const bw = 116;
-    g.fillStyle(0x3a0a14).fillRect(30, 12, bw, 11);
-    g.fillStyle(0xffffff, 0.6).fillRect(30, 12, bw * Math.max(0, this.hpShown / r.maxHp), 11);
-    g.fillStyle(COLORS.hp).fillRect(30, 12, bw * (r.hp / r.maxHp), 11);
-    g.fillStyle(0xff9090).fillRect(30, 12, bw * (r.hp / r.maxHp), 2);
-    g.fillStyle(0x1a2030).fillRect(30, 28, bw, 11);
-    g.fillStyle(COLORS.armor).fillRect(30, 28, bw * (r.maxArmor ? r.armor / r.maxArmor : 0), 11);
-    g.fillStyle(0xd0e0f0).fillRect(30, 28, bw * (r.maxArmor ? r.armor / r.maxArmor : 0), 2);
+    const barX = 66, barW = 118;
+    this.drawBar(g, barX, 12, barW, 12, r.hp / r.maxHp, this.hpShown / r.maxHp, [0xe04848, 0xff9a9a, 0x9a2030, 0x2a0810], r.maxHp);
+    const armorRatio = r.maxArmor ? r.armor / r.maxArmor : 0;
+    this.drawBar(g, barX, 31, barW, 10, armorRatio, armorRatio, [0x8fa8c8, 0xe0ecff, 0x506078, 0x101826], r.maxArmor);
+    if (p.sinceHit > 3500 && r.armor < r.maxArmor) {
+      // armor is regenerating: a light sweeps across the bar
+      const sx = barX + ((_t / 4) % (barW + 20)) - 10;
+      g.fillStyle(0xffffff, 0.35).fillRect(Phaser.Math.Clamp(sx, barX, barX + barW - 4), 31, 4, 10);
+    }
     this.hpText.setText(`${r.hp}/${r.maxHp}`);
     this.armorText.setText(`${r.armor}/${r.maxArmor}`);
+    this.portrait.setTint(p.invuln > 0 && p.sinceHit < 300 ? 0xff8080 : 0xffffff);
     if (r.hp <= 2 && r.hp > 0) {
       const pulse = 0.12 + Math.sin(_t / 150) * 0.08;
       this.damageFlash.setFillStyle(0xff0000, Math.max(this.damageFlash.fillAlpha, pulse));
-    }
+      this.heartIcon.setScale(1.1 + Math.max(0, Math.sin(_t / 120)) * 0.35);
+    } else this.heartIcon.setScale(1.1);
 
     // buffs
     const buffs: [keyof typeof p.buffs, string][] = [['rage', 'buff_rage'], ['haste', 'buff_haste'], ['shield', 'buff_shield']];
@@ -264,8 +396,10 @@ export class HUDScene extends Phaser.Scene {
     const other = r.weapons[1 - r.slot];
     const touch = !!this.joystick;
     const wx = this.weaponIcon.x, wy = this.weaponIcon.y;
-    drawPanel(g, wx - 40, wy - 18, 80, 36, 0x150f24, Phaser.Display.Color.HexStringToColor(RARITY_COLOR[w.rarity]).color, 0.85);
-    if (other) drawPanel(g, this.weapon2Icon.x - 18, this.weapon2Icon.y - 12, 36, 24, 0x150f24, 0x4a3a7a, 0.7);
+    const rarityColor = Phaser.Display.Color.HexStringToColor(RARITY_COLOR[w.rarity]).color;
+    drawPanel(g, wx - 42, wy - 20, 84, 40, 0x150f24, rarityColor, 0.88);
+    this.weaponGlow.setPosition(wx, wy).setTint(rarityColor).setAlpha(0.28 + Math.sin(_t / 400) * 0.08);
+    if (other) drawPanel(g, this.weapon2Icon.x - 18, this.weapon2Icon.y - 12, 36, 24, 0x150f24, 0x4a3a7a, 0.75);
     this.weaponIcon.setTexture(w.texture).setOrigin(0.5);
     this.weapon2Icon.setVisible(!!other);
     if (other) this.weapon2Icon.setTexture(WEAPONS[other].texture);
@@ -274,27 +408,28 @@ export class HUDScene extends Phaser.Scene {
     this.weaponName.setColor(RARITY_COLOR[w.rarity]);
     // cooldown bars (attack + dash)
     const atkCd = Math.max(0, p.attackCd) / (w.cooldown / r.attackSpeed);
-    g.fillStyle(0x000000, 0.6).fillRect(wx - 34, wy + 12, 68, 3);
-    g.fillStyle(0xf0c040).fillRect(wx - 34, wy + 12, 68 * (1 - Math.min(1, atkCd)), 3);
-    const dashFrac = 1 - Math.max(0, p.dashCd) / (950 * r.dashCdMul);
-    const dx = touch ? GAME_W - 132 : wx - 64, dy = touch ? GAME_H - 64 : wy + 10;
-    g.fillStyle(0x000000, 0.6).fillRect(dx - 12, dy, 24, 4);
-    g.fillStyle(dashFrac >= 1 ? 0x6f9cf0 : 0x3a4a7a).fillRect(dx - 12, dy, 24 * Math.min(1, dashFrac), 4);
+    const atkFrac = 1 - Math.min(1, atkCd);
+    this.drawBar(g, wx - 34, wy + 12, 68, 4, atkFrac, atkFrac, [0xf0c040, 0xfff0a0, 0xa07020, 0x1a1008], 1);
+    const dashFrac = Math.min(1, 1 - Math.max(0, p.dashCd) / (950 * r.dashCdMul));
+    const dx = touch ? GAME_W - 132 : wx - 68, dy = touch ? GAME_H - 64 : wy + 8;
+    const dashReady = dashFrac >= 1;
+    this.drawBar(g, dx - 14, dy, 28, 5, dashFrac, dashFrac, dashReady ? [0x6f9cf0, 0xc0dcff, 0x3050a0, 0x0a1020] : [0x3a4a7a, 0x5a6a9a, 0x202a4a, 0x0a1020], 1);
 
     // boss bar
     const boss = gs.bossTarget;
     if (this.bossVisible && boss) {
       const ratio = Math.max(0, boss.hp / boss.maxHp);
       this.bossShown += (ratio - this.bossShown) * Math.min(1, dt / 200);
-      const bwid = 300, bx = GAME_W / 2 - bwid / 2, by = 40;
-      drawPanel(g, bx - 6, by - 4, bwid + 12, 14, 0x150f24, 0x8a3a6a, 0.9);
-      g.fillStyle(0x3a0a20).fillRect(bx, by, bwid, 6);
-      g.fillStyle(0xffffff, 0.7).fillRect(bx, by, bwid * this.bossShown, 6);
-      g.fillStyle(boss.def.id === 'queen' ? 0xff3080 : 0xe04848).fillRect(bx, by, bwid * ratio, 6);
-      if (boss.def.id === 'queen') {
-        g.fillStyle(0xffffff, 0.8);
-        g.fillRect(bx + bwid * 0.66, by - 1, 1, 8);
-        g.fillRect(bx + bwid * 0.33, by - 1, 1, 8);
+      const bwid = 320, bx = GAME_W / 2 - bwid / 2, by = 44;
+      const queen = boss.def.id === 'queen';
+      drawPanel(g, bx - 8, by - 6, bwid + 16, 20, 0x150f24, queen ? 0xc04080 : 0x8a3a5a, 0.92);
+      this.drawBar(g, bx, by, bwid, 8, ratio, this.bossShown,
+        queen ? [0xff3080, 0xffa0d0, 0x901848, 0x2a0818] : [0xe04848, 0xff9a9a, 0x9a2030, 0x2a0810], 1);
+      if (queen) {
+        // phase markers
+        g.fillStyle(0xffffff, 0.9);
+        g.fillRect(bx + bwid * 0.66, by - 2, 2, 12);
+        g.fillRect(bx + bwid * 0.33, by - 2, 2, 12);
       }
     }
 

@@ -39,6 +39,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   private afterTimer = 0;
   private stepTimer = 0;
   private aura: Phaser.GameObjects.Image;
+  private light: Phaser.GameObjects.Image;
 
   constructor(scene: GameScene, x: number, y: number, run: RunState) {
     super(scene, x, y, 'hero_idle0');
@@ -51,6 +52,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.setOrigin(0.5, 0.6);
     this.shadow = scene.add.image(x, y + 6, 'shadow').setDepth(DEPTH.SHADOW);
     this.weaponSprite = scene.add.image(x, y, this.weapon.texture).setDepth(DEPTH.WEAPON);
+    this.light = scene.add.image(x, y, 'glow').setDepth(DEPTH.FLOOR + 1).setBlendMode(Phaser.BlendModes.ADD).setTint(0xfff0d0).setAlpha(0.13).setScale(2.4);
     this.aura = scene.add.image(x, y, 'glow').setDepth(DEPTH.ENTITY - 1).setBlendMode(Phaser.BlendModes.ADD).setVisible(false).setScale(0.6);
     this.refreshWeapon();
     this.play('hero_idle');
@@ -139,6 +141,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
   update(_t: number, dt: number) {
     const sec = dt / 1000;
     this.shadow.setPosition(this.x, this.y + 6);
+    this.light.setPosition(this.x, this.y + 2);
     if (this.dead) return;
     const s = this.scene;
     const r = this.run;
@@ -202,7 +205,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
       if (spd > 20) {
         if (this.anims.currentAnim?.key !== 'hero_walk') this.play('hero_walk');
         this.stepTimer -= dt;
-        if (this.stepTimer <= 0) { this.stepTimer = 260; Audio.sfx('step', 100); }
+        if (this.stepTimer <= 0) { this.stepTimer = 260; Audio.sfx('step', 100); s.fx.dust(this.x, this.y + 7); }
       } else if (this.anims.currentAnim?.key !== 'hero_idle') this.play('hero_idle');
     }
     if (this.invuln > 0 && this.dashTime <= 0) this.setAlpha(Math.floor(this.invuln / 80) % 2 ? 0.45 : 1);
@@ -246,6 +249,7 @@ export class Player extends Phaser.Physics.Arcade.Sprite {
     this.weaponSprite?.destroy();
     this.shadow?.destroy();
     this.aura?.destroy();
+    this.light?.destroy();
     super.destroy(fromScene);
   }
 }
